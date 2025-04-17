@@ -3,6 +3,11 @@ import type { NextRequest } from "next/server"
 import { createMiddlewareClient } from "@supabase/auth-helpers-nextjs"
 
 export async function middleware(request: NextRequest) {
+  // Ana sayfaya erişimi her zaman izin ver
+  if (request.nextUrl.pathname === "/") {
+    return NextResponse.next()
+  }
+
   const res = NextResponse.next()
   const supabase = createMiddlewareClient({ req: request, res })
 
@@ -11,12 +16,8 @@ export async function middleware(request: NextRequest) {
     data: { session },
   } = await supabase.auth.getSession()
 
-  // Ana sayfa ve auth sayfaları için middleware kontrolü yapma
-  if (
-    request.nextUrl.pathname === "/" ||
-    request.nextUrl.pathname.startsWith("/login") ||
-    request.nextUrl.pathname.startsWith("/api/")
-  ) {
+  // Auth sayfaları ve API rotaları için middleware kontrolü yapma
+  if (request.nextUrl.pathname.startsWith("/login") || request.nextUrl.pathname.startsWith("/api/")) {
     return res
   }
 
