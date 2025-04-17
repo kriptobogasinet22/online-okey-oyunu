@@ -730,7 +730,7 @@ export default function Game({ params }: GameProps) {
                   <Button onClick={() => alert("Per atıldı!")} className="bg-yellow-600 hover:bg-yellow-700">
                     Per At
                   </Button>
-                  <Button onClick={() => alert("Bitti!")} className="bg-red-600 hover:bg-red-700">
+                  <Button onClick={()={() => alert("Bitti!")} className="bg-red-600 hover:bg-red-700">
                     Bitti!
                   </Button>
                 </CardContent>
@@ -884,4 +884,8 @@ function PlayerCard({ player }: { player: Player }) {
 function EmptySeat({ position }: { position: number }) {
   return (
     <div className="bg-gray-100 p-2 rounded-lg w-24 md:w-32 text-center shadow-md border border-dashed border-gray-300">
-      \
+      <p className="text-gray-400">Boş</p>
+      <p className="text-xs text-gray-400">Koltuk {position}</p>
+    </div>
+  )
+}
