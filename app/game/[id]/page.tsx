@@ -730,7 +730,7 @@ export default function Game({ params }: GameProps) {
                   <Button onClick={() => alert("Per atıldı!")} className="bg-yellow-600 hover:bg-yellow-700">
                     Per At
                   </Button>
-                  <Button onClick={()={() => alert("Bitti!")} className="bg-red-600 hover:bg-red-700">
+                  <Button onClick={() => alert("Bitti!")} className="bg-red-600 hover:bg-red-700">
                     Bitti!
                   </Button>
                 </CardContent>
