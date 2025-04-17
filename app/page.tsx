@@ -1,214 +1,140 @@
-"use client"
+'use client'
 
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { getSupabaseClient } from "@/lib/supabase/client"
-import type { WebApp } from "@/types/telegram-web-app"
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import Image from 'next/image'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 
+// Telegram WebApp API tipini tanımlayalım
 declare global {
   interface Window {
     Telegram: {
-      WebApp: WebApp
+      WebApp: {
+        initData: string
+        initDataUnsafe: {
+          user?: {
+            id: number
+            first_name: string
+            last_name?: string
+            username?: string
+            language_code: string
+          }
+        }
+        ready: () => void
+        expand: () => void
+        close: () => void
+      }
     }
   }
 }
 
 export default function Home() {
   const router = useRouter()
-  const [user, setUser] = useState<any>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [isDevelopment, setIsDevelopment] = useState(false)
+  const supabase = createClientComponentClient()
 
-  const handleTelegramLogin = async () => {
-    if (isDevelopment) {
-      // Geliştirme modunda test kullanıcısı ile giriş yap
-      try {
-        setIsLoading(true)
-
-        // Test kullanıcısı oluştur
-        const testUser = {
-          id: "12345678",
-          first_name: "Test",
-          last_name: "User",
-          username: "testuser",
-        }
-
-        // Geliştirme modunda localStorage kullanarak oturum yönetimi
-        localStorage.setItem("testUser", JSON.stringify(testUser))
-        localStorage.setItem("testBalance", "1000")
-
-        // Kullanıcı bilgilerini ayarla ve dashboard'a yönlendir
-        setUser(testUser)
-        router.push("/dashboard")
-      } catch (err) {
-        console.error("Test giriş hatası:", err)
-        setError("Test giriş yapılırken bir hata oluştu.")
-        setIsLoading(false)
-      }
-    } else if (window.Telegram && window.Telegram.WebApp) {
-      // Telegram ile giriş kodu değişmedi
-      try {
-        setIsLoading(true)
-        // Telegram WebApp'i başlat
-        const tgApp = window.Telegram.WebApp
-        tgApp.expand()
-
-        // Telegram verilerini al
-        const initData = tgApp.initData
-
-        // Telegram verilerini API'ye gönder
-        const response = await fetch("/api/auth/telegram", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ initData }),
-        })
-
-        const data = await response.json()
-
-        if (!response.ok) {
-          throw new Error(data.error || "Giriş yapılırken bir hata oluştu")
-        }
-
-        // Supabase oturumunu ayarla
-        const supabase = getSupabaseClient()
-        await supabase.auth.setSession({
-          access_token: data.session.access_token,
-          refresh_token: data.session.refresh_token,
-        })
-
-        // Kullanıcı bilgilerini ayarla ve dashboard'a yönlendir
-        setUser(data.user)
-        router.push("/dashboard")
-      } catch (err) {
-        console.error("Telegram giriş hatası:", err)
-        setError("Telegram ile giriş yapılırken bir hata oluştu.")
-        setIsLoading(false)
+  useEffect(() => {
+    // Telegram WebApp API'sini kontrol et
+    const isTelegramWebApp = window.Telegram && window.Telegram.WebApp
+    
+    if (isTelegramWebApp) {
+      // Telegram WebApp'i hazır olduğunu bildir
+      window.Telegram.WebApp.ready()
+      // WebApp'i genişlet
+      window.Telegram.WebApp.expand()
+      
+      // Telegram kullanıcı bilgilerini al
+      const telegramUser = window.Telegram.WebApp.initDataUnsafe.user
+      
+      if (telegramUser) {
+        // Kullanıcı giriş yapmış, dashboard'a yönlendir
+        handleTelegramLogin(telegramUser)
       }
     } else {
-      setError("Telegram WebApp bulunamadı. Lütfen Telegram uygulaması içinden erişin.")
+      // Tarayıcıdan erişim durumunda otomatik olarak dashboard'a yönlendir
+      // Not: Gerçek uygulamada burada bir kimlik doğrulama kontrolü yapılmalıdır
+      checkSession()
+    }
+  }, [])
+
+  // Oturum kontrolü
+  const checkSession = async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    
+    if (session) {
+      router.push('/dashboard')
     }
   }
 
-  useEffect(() => {
-    // Geliştirme ortamını kontrol et
-    setIsDevelopment(process.env.NODE_ENV === "development")
+  // Telegram ile giriş işlemi
+  const handleTelegramLogin = async (telegramUser: any) => {
+    try {
+      // Telegram kullanıcı bilgilerini API'ye gönder ve giriş yap
+      const response = await fetch('/api/auth/telegram-login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          telegram_id: telegramUser.id.toString(),
+          first_name: telegramUser.first_name,
+          last_name: telegramUser.last_name || '',
+          username: telegramUser.username || '',
+        }),
+      })
 
-    // Geliştirme modunda test kullanıcısını kontrol et
-    if (process.env.NODE_ENV === "development") {
-      const testUserStr = localStorage.getItem("testUser")
-      if (testUserStr) {
-        try {
-          const testUser = JSON.parse(testUserStr)
-          setUser(testUser)
-          router.push("/dashboard")
-          return
-        } catch (err) {
-          console.error("Test kullanıcı verisi çözümlenemedi:", err)
-        }
-      }
-    }
-
-    // Telegram WebApp script yükleme
-    const script = document.createElement("script")
-    script.src = "https://telegram.org/js/telegram-web-app.js"
-    script.async = true
-    script.onload = () => {
-      setIsLoading(false)
-
-      // Telegram WebApp başlatma
-      if (window.Telegram && window.Telegram.WebApp) {
-        try {
-          const tgApp = window.Telegram.WebApp
-          tgApp.expand()
-
-          // Kullanıcı daha önce giriş yapmış mı kontrol et
-          const supabase = getSupabaseClient()
-          supabase.auth.getSession().then(({ data: { session } }) => {
-            if (session) {
-              // Kullanıcı giriş yapmış, dashboard'a yönlendir
-              setUser(session.user)
-              router.push("/dashboard")
-            }
-          })
-        } catch (err) {
-          console.error("Telegram WebApp başlatma hatası:", err)
-          setError("Telegram WebApp başlatılamadı.")
-        }
+      if (response.ok) {
+        // Başarılı giriş, dashboard'a yönlendir
+        router.push('/dashboard')
       } else {
-        setError("Telegram WebApp bulunamadı. Lütfen Telegram uygulaması içinden erişin.")
+        console.error('Telegram login failed')
       }
+    } catch (error) {
+      console.error('Error during Telegram login:', error)
     }
+  }
 
-    script.onerror = () => {
-      setIsLoading(false)
-      setError("Telegram WebApp yüklenemedi.")
-    }
-
-    document.body.appendChild(script)
-
-    return () => {
-      if (document.body.contains(script)) {
-        document.body.removeChild(script)
-      }
-    }
-  }, [router])
+  // Tarayıcıdan erişim için giriş butonu
+  const handleBrowserLogin = () => {
+    router.push('/login')
+  }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-gray-100">
-      <h1 className="text-4xl font-bold mb-8">Online Okey Oyunu</h1>
-
-      {isLoading ? (
-        <p>Yükleniyor...</p>
-      ) : error ? (
-        <div className="text-red-500 mb-4">
-          <p>{error}</p>
-          <p className="text-sm mt-2">
-            Bu uygulama Telegram Mini App olarak çalışmaktadır. Lütfen Telegram uygulaması içinden erişin.
-            {isDevelopment && (
-              <span className="block mt-2 text-blue-500">
-                Geliştirme modunda olduğunuz için aşağıdaki butonu kullanarak test giriş yapabilirsiniz.
-              </span>
-            )}
+    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-green-800 to-green-950 p-4">
+      <Card className="w-full max-w-md bg-white/95 shadow-xl">
+        <CardHeader className="text-center">
+          <div className="mx-auto mb-4 relative w-24 h-24">
+            <Image
+              src="/logo.png"
+              alt="Okey Oyunu Logo"
+              fill
+              style={{ objectFit: 'contain' }}
+              priority
+            />
+          </div>
+          <CardTitle className="text-2xl font-bold text-green-800">Online Okey Oyunu</CardTitle>
+          <CardDescription>
+            Arkadaşlarınızla birlikte online okey oynayın
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="text-center">
+          <p className="mb-4">
+            Gerçek oyuncularla online okey oynamak için giriş yapın veya hesap oluşturun.
           </p>
-        </div>
-      ) : user ? (
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <CardTitle>Hoş Geldiniz, {user.first_name || user.user_metadata?.first_name || "Kullanıcı"}</CardTitle>
-            <CardDescription>Oyun panelinize erişebilirsiniz.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button onClick={() => router.push("/dashboard")} className="w-full">
-              Oyun Paneline Git
-            </Button>
-          </CardContent>
-        </Card>
-      ) : (
-        <>
-          <Button onClick={handleTelegramLogin} className="mb-6 bg-[#0088cc] hover:bg-[#0077b5]">
-            {isDevelopment ? "Test Giriş Yap" : "Telegram ile Giriş Yap"}
+        </CardContent>
+        <CardFooter className="flex flex-col gap-2">
+          <Button 
+            className="w-full bg-[#0088cc] hover:bg-[#0077b5]" 
+            onClick={handleBrowserLogin}
+          >
+            Giriş Yap
           </Button>
-
-          <Card className="w-full max-w-md">
-            <CardHeader>
-              <CardTitle>Oyun Paneli</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p>Oyun panelini görmek için giriş yapmalısınız.</p>
-              {isDevelopment && (
-                <p className="mt-4 text-sm text-blue-500">
-                  Geliştirme modunda olduğunuz için "Test Giriş Yap" butonunu kullanabilirsiniz.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </>
-      )}
-    </main>
+          <p className="text-xs text-center text-gray-500 mt-2">
+            Telegram üzerinden açtıysanız otomatik olarak giriş yapılacaktır.
+          </p>
+        </CardFooter>
+      </Card>
+    </div>
   )
 }
